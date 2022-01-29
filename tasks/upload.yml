@@ -1,0 +1,45 @@
+---
+- name: Uploading
+  delegate_to: localhost
+  delegate_facts: true
+  run_once: true
+  block:
+    - name: Query created dir on AWX
+      stat:
+        path: "{{ hostvars['localhost']['base_dir'] }}"
+      register: base_dir_stat
+      failed_when: base_dir_stat.stat.isdir is not defined or not base_dir_stat.stat.isdir
+
+    - name: Upload data from AWX to SFTP
+      block:
+        - name: Set full path for archive
+          set_fact:
+            archive_fullpath: "{{ hostvars['localhost']['base_dir'] }}/../{{ hostvars['localhost']['archive_filename'] }}"
+        
+        - name: Compress the folder before upload
+          community.general.archive:
+            path: "{{ hostvars['localhost']['base_dir'] }}"
+            format: zip
+            dest: "{{ hostvars['localhost']['archive_fullpath'] }}"
+            
+        - name: Upload the archive to SFTP
+          shell: curl -k "sftp://{{ hostvars['localhost']['sftp_server'] }}" --user "$SFTP_USER:$SFTP_PASSWORD" -T "{{ hostvars['localhost']['archive_fullpath'] }}"
+          ignore_errors: true
+          register: sftp_result
+
+        - debug:
+            msg: "Successfully uploaded {{ hostvars['localhost']['archive_filename'] }} to {{ hostvars['localhost']['sftp_server'] }}!"
+          when: sftp_result.rc == 0
+        
+        - debug:
+            msg: "Uploading {{ hostvars['localhost']['archive_filename'] }} to {{ hostvars['localhost']['sftp_server'] }} FAILED!"
+          when: sftp_result.rc != 0
+      always:
+        - block:
+            - name: Clean up temporary data folder on Tower
+              file:
+                path: "{{ item }}"
+                state: absent
+              loop:
+                - "{{ hostvars['localhost']['base_dir'] }}"
+                - "{{ hostvars['localhost']['archive_fullpath'] }}"

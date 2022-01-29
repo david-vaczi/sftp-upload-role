@@ -1,0 +1,51 @@
+---
+- name: Preparing upload
+  delegate_to: localhost
+  delegate_facts: true
+  run_once: true
+  block:
+    - name: Set command for API access
+      set_fact:
+        curl_cmd: >-
+          curl -k -s -S -H "Content-type: application/json" -H
+          "Accept: application/json"{% if awx_oauth_token | length > 0 %} -H
+          "Authorization: Bearer $AWX_OAUTH_TOKEN"{% elif auth_method == "password" %}
+          -u "$AWX_USER:$AWX_PASSWORD"{% elif auth_method == "token" %} -H
+          "Authorization: Bearer $AWX_PASSWORD"{% endif %}
+
+    - name: Get the Inventory from AWX
+      shell: '{{ hostvars["localhost"]["curl_cmd"] }} "$AWX_HOST/api/v2/inventories/$INVENTORY_ID/"'
+      register: inventory
+
+    - name: Get the Job Template from AWX
+      shell: '{{ hostvars["localhost"]["curl_cmd"] }} "$AWX_HOST/api/v2/job_templates/{{ awx_job_template_id }}/"'
+      register: job_template
+
+    - name: Set facts used during execution
+      set_fact:
+        auth_method: "{{ auth_method }}"
+        output_dir: "{{ output_dir }}"
+        timestamp: "{{ '%Y-%m-%d_%H-%M' | strftime }}"
+        org: "{{ (inventory.stdout | from_json).summary_fields.organization.name }}"
+        project: "{{ (job_template.stdout | from_json).summary_fields.project.name }}"
+        sftp_server: "{{ sftp_server }}"
+
+    - name: Set full path to temporary folder on AWX
+      set_fact:
+        base_dir: "{{ hostvars['localhost']['output_dir'] }}/\
+          {{ hostvars['localhost']['project'] }}/\
+          {{ hostvars['localhost']['org'] }}-\
+          {{ hostvars['localhost']['project'] }}-\
+          {{ awx_job_id }}_{{ hostvars['localhost']['timestamp'] }}"
+    
+    - name: Set filename for archive
+      set_fact:
+        archive_filename: "{{ hostvars['localhost']['org'] }}-\
+          {{ hostvars['localhost']['project'] }}-\
+          {{ awx_job_id }}_{{ hostvars['localhost']['timestamp'] }}.zip"
+
+    - name: Create the temporary folder on AWX
+      file:
+        path: "{{ hostvars['localhost']['base_dir'] }}"
+        state: directory
+        mode: '0700'

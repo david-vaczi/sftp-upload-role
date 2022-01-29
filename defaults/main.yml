@@ -1,0 +1,4 @@
+---
+phase: "prepare"
+auth_method: "password"
+output_dir: "/tmp/ansible"

@@ -1,0 +1,13 @@
+---
+- name: Bootstrap
+  delegate_to: localhost
+  delegate_facts: true
+  run_once: true
+  block:
+    - name: Prepare upload from AWX to SFTP
+      include_tasks: prepare.yml
+      when: phase == "prepare"
+
+    - name: Upload data from AWX to SFTP
+      include_tasks: upload.yml
+      when: phase == "upload"
